@@ -5,7 +5,6 @@
 #include "dma.h"
 #include "gpio.h"
 #include "osc.h"
-#include "osc_protocol.h"
 #include "pwm.h"
 #include "tim.h"
 #include "stm32c031xx.h"

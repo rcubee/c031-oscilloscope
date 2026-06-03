@@ -1,5 +1,5 @@
-#ifndef OSC_PROTOCOL_H
-#define OSC_PROTOCOL_H
+#ifndef OSC_SHARED_H
+#define OSC_SHARED_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -138,4 +138,4 @@ osc_frame_samples* osc_build_frame_samples(
 }
 #endif // __cplusplus
 
-#endif // OSC_PROTOCOL_H
+#endif // OSC_SHARED_H

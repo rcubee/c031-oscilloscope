@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "osc_protocol.h"
+#include "osc_shared.h"
 #include "adc.h"
 #include "trigger.h"
 

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include "stm32c0xx.h"
-#include "osc_protocol.h"
+#include "osc_shared.h"
 
 #define ADC_BUFF_SIZE_EXP (10U)
 #define ADC_BUFF_SIZE (1U << ADC_BUFF_SIZE_EXP)

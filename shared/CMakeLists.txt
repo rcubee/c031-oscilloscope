@@ -9,7 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_library(c031-oscilloscope-shared STATIC)
 
 target_sources(c031-oscilloscope-shared PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/src/osc_protocol.c
+    ${CMAKE_CURRENT_LIST_DIR}/src/osc_shared.c
 )
 
 target_include_directories(c031-oscilloscope-shared PUBLIC

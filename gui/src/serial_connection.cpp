@@ -1,5 +1,4 @@
 #include "serial_connection.hpp"
-#include "osc_protocol.h"
 #include <QDebug>
 
 bool SerialConnection::WriteFrame(void* frame, size_t frame_size)

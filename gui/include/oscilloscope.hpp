@@ -5,7 +5,7 @@
 #include <QSerialPort>
 #include <QValueAxis>
 #include <vertical_dial.hpp>
-#include "osc_protocol.h"
+#include "osc_shared.h"
 
 static constexpr float VOLTAGE_MIN = 0.0f;
 static constexpr float VOLTAGE_MAX = 3.3f;

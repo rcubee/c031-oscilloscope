@@ -1,7 +1,7 @@
 #pragma once
 
 #include "labeled_dial.hpp"
-#include "osc_protocol.h"
+#include "osc_shared.h"
 
 class HorizontalDial : public LabeledDial
 {

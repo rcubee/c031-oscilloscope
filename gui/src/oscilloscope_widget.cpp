@@ -1,5 +1,4 @@
 #include "oscilloscope_widget.hpp"
-#include "osc_protocol.h"
 #include <QDirIterator>
 #include <QListView>
 #include <QMessageBox>

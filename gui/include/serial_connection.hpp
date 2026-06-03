@@ -1,6 +1,6 @@
 #pragma once
 
-#include "osc_protocol.h"
+#include "osc_shared.h"
 #include "oscilloscope.hpp"
 #include <QMutex>
 #include <QMutexLocker>
