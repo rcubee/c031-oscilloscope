@@ -35,6 +35,9 @@ void adc_cleanup_after_sampling();
 
 uint16_t* adc_get_buff();
 
+/*
+ * @brief This function calculates optimal acquisition parameters.
+ */
 adc_acq_params adc_calculate_acq_params(uint32_t acquisition_time_us, uint16_t max_sample_count, uint8_t channel_count);
 
 #endif /* INC_ADC_H_ */
