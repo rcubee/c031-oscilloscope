@@ -2,5 +2,7 @@ build/
 .cache
 compile_commands.json
 
+*.patch
+
 .vscode
 .zed
