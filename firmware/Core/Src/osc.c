@@ -12,6 +12,9 @@
 #include "systick.h"
 #include "usart.h"
 
+#define DIV_COUNT 10
+#define MAX_SAMPLE_COUNT 1000
+
 static volatile osc g_osc;
 
 static volatile osc *osc_get()
@@ -33,6 +36,32 @@ static osc_config osc_get_default_config()
     };
 
     return config;
+}
+
+static osc_trigger osc_get_default_trigger() {
+    osc_trigger trigger = {
+        .mode = OSC_TRIGGER_MODE_AUTO,
+        .type = (osc_trigger_type) {
+            .etype = OSC_TRIGGER_ETYPE_THRESHOLD,
+            .algo = (osc_trigger_algo) {
+                .fn = osc_trigger_algo_fn_threshold,
+                .data.threshold = (osc_trigger_algo_data_threshold) {
+                    .threshold_low = (1 << (ADC_BUFF_SIZE_EXP - 2)) - 1,
+                    .threshold_high = (1 << (ADC_BUFF_SIZE_EXP - 1)) - 1,
+                    .fell_below_low_threshold = false
+                }
+            }
+        },
+        .estate = OSC_TRIGGER_ESTATE_IDLE,
+
+        .sample_index = 0,
+
+        .pre_trigger_percentage = 25,
+
+        .transfer_complete_count = 0
+    };
+
+    return trigger;
 }
 
 /*
@@ -131,12 +160,10 @@ void DMA1_Channel2_3_IRQHandler()
         goto DMA1_Channel2_3_IRQHandler_cleanup; // Note: Timer is responsible for ensuring that no overrun occurs
     }
 
-    // bool processing_second_half = oscilloscope->trigger.sample_index & (1 << (ADC_BUFF_SIZE_EXP - 1));
     bool processing_first_half = oscilloscope->trigger.sample_index < (ADC_BUFF_SIZE >> 1);
     bool transferring_to_first_half = DMA1->ISR & DMA_ISR_TCIF3;
-    bool transferring_to_second_half = DMA1->ISR & DMA_ISR_HTIF3;
 
-    if ((transferring_to_first_half && processing_first_half) || (transferring_to_second_half && !processing_first_half)) {
+    if ((transferring_to_first_half && processing_first_half) || (!transferring_to_first_half && !processing_first_half)) {
         // Note: At this point, there is no guarantee that transferred data will not corrupt not-yet-processed data.
         tim_disable();
 
@@ -191,33 +218,13 @@ void osc_init()
     debug_init();
 #endif // DEBUG
 
+    LOG("Build date: %s", __TIMESTAMP__);
+
     osc* oscilloscope = osc_get();
     *oscilloscope = (osc) {
         .state = OSC_STATE_IDLE,
-
         .config = osc_get_default_config(),
-
-        .trigger = (osc_trigger) {
-            .mode = OSC_TRIGGER_MODE_AUTO,
-            .type = (osc_trigger_type) {
-                .etype = OSC_TRIGGER_ETYPE_THRESHOLD,
-                .algo = (osc_trigger_algo) {
-                    .fn = osc_trigger_algo_fn_threshold,
-                    .data.threshold = (osc_trigger_algo_data_threshold) {
-                        .threshold_low = (1 << (ADC_BUFF_SIZE_EXP - 2)) - 1,
-                        .threshold_high = (1 << (ADC_BUFF_SIZE_EXP - 1)) - 1,
-                        .fell_below_low_threshold = false
-                    }
-                }
-            },
-            .estate = OSC_TRIGGER_ESTATE_IDLE,
-
-            .sample_index = 0,
-
-            .pre_trigger_percentage = 25,
-
-            .transfer_complete_count = 0
-        }
+        .trigger = osc_get_default_trigger()
     };
 
     adc_init();
@@ -227,8 +234,6 @@ void osc_init()
     systick_init();
     tim_init();
     usart_init();
-
-    LOG("Build date: %s", __TIMESTAMP__);
 }
 
 static void osc_handle_protocol(osc* oscilloscope)
@@ -314,8 +319,8 @@ void osc_sample()
     osc_trigger_reset(&oscilloscope->trigger);
 
     adc_acq_params acq_params = adc_calculate_acq_params(
-        10 * oscilloscope->config.horizontal_scale,
-        1000,
+        DIV_COUNT * oscilloscope->config.horizontal_scale,
+        MAX_SAMPLE_COUNT,
         osc_channel_count(oscilloscope->config.channels_enabled)
     );
 
@@ -397,20 +402,18 @@ void osc_wait_for_trigger(osc* oscilloscope, uint8_t timeout_ms, uint16_t sample
         return;
     }
 
-    {
-        /* Note:
-         * Any DMA transfers that occur after calculating scans_done
-         * will not be accounted for (ADC scans are ongoing). As a result,
-         * more samples may be collected than necessary. This is not
-         * an issue as long as the number of extra samples does not
-         * exceed the extra space in the sample buffer.
-         */
+    /* Note:
+     * Any DMA transfers that occur after calculating scans_done
+     * will not be accounted for (ADC scans are ongoing). As a result,
+     * more samples may be collected than necessary. This is not
+     * an issue as long as the number of extra samples does not
+     * exceed the extra space in the sample buffer.
+     */
 
-        uint16_t scans_done = osc_get_post_trigger_scan_count(oscilloscope);
-        uint16_t scans_to_do = samples_per_channel - scans_done - oscilloscope->trigger.pre_trigger_scan_count;
+    uint16_t scans_done = osc_get_post_trigger_scan_count(oscilloscope);
+    uint16_t scans_to_do = samples_per_channel - scans_done - oscilloscope->trigger.pre_trigger_scan_count;
 
-        TIM1->RCR = scans_to_do - 1; // -1 due to preloading
-    }
+    TIM1->RCR = scans_to_do - 1; // -1 due to preloading
 
     /* Note:
      * Wait for UEV to occur after setting the RCR preload register,
