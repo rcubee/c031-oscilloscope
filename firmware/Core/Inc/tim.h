@@ -1,7 +1,6 @@
 #ifndef INC_TIM_H_
 #define INC_TIM_H_
 
-#include "osc_protocol.h"
 #include <stdint.h>
 
 void tim_init();
