@@ -76,7 +76,7 @@ HorizontalDial::HorizontalDial(QWidget* parent)
     : LabeledDial(true)
 {
     setRange(0, OSC_HORIZONTAL_SCALE_COUNT - 1);
-    setValue(9); // Default to 1ms
+    setValue(HorizontalScaleToIndex(OSC_HORIZONTAL_SCALE_1ms)); // Default to 1ms
 }
 
 osc_horizontal_scale HorizontalDial::GetHorizontalScale()

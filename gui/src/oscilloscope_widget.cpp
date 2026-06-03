@@ -11,7 +11,10 @@
 void OscilloscopeWidget::OnConnectButtonReleased()
 {
     if (serial_connection.IsOpen()) {
+        serial_connection.FrameStopCollectingSamples();
+
         serial_connection.Close();
+
         OnSerialConnectionClosed();
     }
     else {
@@ -44,6 +47,7 @@ void OscilloscopeWidget::OnSerialConnectionErrorOccured(QSerialPort::SerialPortE
     DisplayWarning(warning);
 }
 
+// TODO: REname to pressed
 void OscilloscopeWidget::OnChannelButtonToggled(ChannelButton* channel_button, EChannel channel, bool enabled)
 {
     if (!serial_connection.IsOpen()) {
@@ -53,21 +57,15 @@ void OscilloscopeWidget::OnChannelButtonToggled(ChannelButton* channel_button, E
         return;
     }
 
-    if (channel == EChannel::_1) {
-        if (enabled) {
-            channel1.SetEnabled();
-            serial_connection.FrameStartCollectingSamples();
-        } else {
-            channel1.SetDisabled();
-            serial_connection.FrameStopCollectingSamples();
+    Channel& ch = channel == EChannel::_1 ? channel1 : channel2;
 
-            static_cast<QLineSeries*>(ui.graph->chart()->series().first())->clear();
-        }
+    if (enabled) {
+        ch.SetEnabled();
     } else {
-        channel_button->SetDisabled();
-
-        DisplayWarning("TODO");
+        ch.SetDisabled();
     }
+
+    UpdateConfig();
 }
 
 void OscilloscopeWidget::OnSerialConnectionOpened()
@@ -91,17 +89,19 @@ void OscilloscopeWidget::OnSerialConnectionGetConfig(osc_frame_config config)
 {
     qDebug() << "OnSerialConnectionGetConfig";
 
-    if (config.ch1 & OSC_CHANNEL_FLAG_ENABLE) {
+    if (config.channels_enabled & OSC_ECHANNEL_1) {
         channel1.SetEnabled();
         ui.ch1_button->SetEnabled();
     }
 
-    if (config.ch2 & OSC_CHANNEL_FLAG_ENABLE) {
+    if (config.channels_enabled & OSC_ECHANNEL_2) {
         channel2.SetEnabled();
         ui.ch2_button->SetEnabled();
     }
 
     ui.horizontal_dial->SetHorizontalScale(config.horizontal_scale);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    serial_connection.FrameStartCollectingSamples();
 }
 
 void OscilloscopeWidget::OnSerialConnectionClosed()
@@ -133,9 +133,24 @@ void OscilloscopeWidget::OnVerticalDialChanged(int)
     channel2.SetVerticalScale(ui.ch2_dial->GetVerticalScale());
 }
 
+void OscilloscopeWidget::UpdateConfig()
+{
+    osc_echannel channels_enabled = 0;
+    if (channel1.IsEnabled()) {
+        channels_enabled |= OSC_ECHANNEL_1;
+    }
+    if (channel2.IsEnabled()) {
+        channels_enabled |= OSC_ECHANNEL_2;
+    }
+
+    serial_connection.FrameConfig(channels_enabled, ui.horizontal_dial->GetHorizontalScale());
+
+    x_axis->setRange(0, ui.horizontal_dial->GetHorizontalScale() * 10);
+}
+
 void OscilloscopeWidget::OnHorizontalScaleChanged(int _)
 {
-    serial_connection.FrameConfig(ui.horizontal_dial->GetHorizontalScale());
+    UpdateConfig();
 }
 
 void OscilloscopeWidget::DisplayMessage(const QString& message)
@@ -219,7 +234,7 @@ OscilloscopeWidget::OscilloscopeWidget(QWidget *parent)
 void OscilloscopeWidget::ConfigureGraph()
 {
     x_axis->setTitleText("Samples");
-    x_axis->setLabelFormat("%i");
+    x_axis->setLabelFormat("%ius");
     x_axis->setRange(0.0f, 1000.0f);
     x_axis->setTickCount(10 + 1);
     x_axis->setGridLinePen(QColor(127, 127, 127));
@@ -233,6 +248,7 @@ void OscilloscopeWidget::ConfigureGraph()
     y_axis->setGridLineColor(QColor(127, 127, 127));
 
     chart->addSeries(channel1.GetSeries());
+    chart->addSeries(channel2.GetSeries());
     chart->addAxis(x_axis, Qt::AlignBottom);
     chart->addAxis(y_axis, Qt::AlignLeft);
     chart->legend()->setAlignment(Qt::AlignRight);
@@ -240,6 +256,7 @@ void OscilloscopeWidget::ConfigureGraph()
     chart->setPlotAreaBackgroundVisible();
 
     channel1.AttachAxis(x_axis, y_axis);
+    channel2.AttachAxis(x_axis, y_axis);
 
     // ui.graph->setRubberBand(QChartView::HorizontalRubberBand);
     // ui.graph->setInteractive(true);
@@ -251,13 +268,16 @@ void OscilloscopeWidget::ConfigureGraph()
 }
 
 
-void OscilloscopeWidget::UpdateGraph(const std::vector<uint16_t>& samples)
+void OscilloscopeWidget::UpdateGraph(const std::vector<ChannelSamples>& channel_samples_vec)
 {
-    // const auto pair = std::minmax_element(samples.begin(), samples.end());
-    // const uint16_t min = *pair.first;
-    // const uint16_t max = *pair.second;
-
-    channel1.Replace(samples, ui.ch1_pos_dial->GetPosition());
+    for (auto& channel_samples : channel_samples_vec) {
+        if (channel_samples.channel == EChannel::_1) {
+            channel1.Replace(channel_samples.samples, ui.ch1_pos_dial->GetPosition());
+        }
+        else if (channel_samples.channel == EChannel::_2) {
+            channel2.Replace(channel_samples.samples, ui.ch2_pos_dial->GetPosition());
+        }
+    }
 }
 
 void OscilloscopeWidget::UpdateDevicePathList()

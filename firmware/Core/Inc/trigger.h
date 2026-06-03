@@ -32,7 +32,8 @@ typedef struct osc_trigger_algo_result {
 
 typedef osc_trigger_algo_result (*osc_trigger_algo_fn)(
     void* data,
-    const uint16_t* adc_buffer,
+    const uint16_t* sample_buffer,
+    uint8_t channel_count,
     uint16_t sample_index,
     uint16_t sample_count
 );
@@ -70,9 +71,13 @@ typedef enum osc_trigger_estate
 typedef struct osc_trigger {
     osc_trigger_mode mode;
     osc_trigger_type type;
-
     osc_trigger_estate estate;
+
     uint16_t sample_index;
+
+    uint8_t pre_trigger_percentage;
+    uint16_t pre_trigger_scan_count;
+
     uint32_t transfer_complete_count;
 } osc_trigger;
 
@@ -81,6 +86,7 @@ typedef struct osc_trigger {
 osc_trigger_algo_result osc_trigger_algo_fn_threshold(
     void* data,
     const uint16_t* sample_buff,
+    uint8_t channel_count,
     uint16_t sample_index,
     uint16_t sample_count);
 

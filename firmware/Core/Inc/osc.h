@@ -16,18 +16,14 @@ typedef enum osc_state
 typedef struct osc_config
 {
     adc_resolution adc_resolution;
-    osc_channel_flags channel1;
+    osc_echannel channels_enabled;
     osc_horizontal_scale horizontal_scale;
-
-    uint16_t sample_count; // The total amount of samples to collect
-    uint16_t pre_trigger_sample_count; // The amount of pre-trigger samples to collect
 } osc_config;
 
 typedef struct osc
 {
     osc_state state;
     osc_config config;
-
     osc_trigger trigger;
 } osc;
 

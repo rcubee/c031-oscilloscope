@@ -32,6 +32,8 @@ void Channel::SetEnabled()
 void Channel::SetDisabled()
 {
     _enabled = false;
+
+    _series->clear();
 }
 
 void Channel::AttachAxis(QValueAxis* x_axis, QValueAxis* y_axis)
@@ -55,7 +57,11 @@ void Channel::Replace(const std::vector<uint16_t>& samples, qreal vertical_posit
     points.resize(samples.size());
 
     for (size_t i = 0; i < samples.size(); ++i) {
-        const qreal x = i;
+        // const qreal x = i;
+
+        QValueAxis *x_axis = qobject_cast<QValueAxis*>(_series->attachedAxes().first());
+        const qreal x = static_cast<qreal>(i) * (x_axis->max() / (samples.size() - 1));
+
         qreal y = ((float)samples.at(i) / 1023.0f) * VPP * (VerticalScaleToMultiplier(_vertical_scale));
         y += vertical_position;
         const QPointF point(x, y);
@@ -70,3 +76,6 @@ void Channel::SetVerticalScale(VerticalScale vertical_scale)
 {
     _vertical_scale = vertical_scale;
 }
+
+ChannelSamples::ChannelSamples(EChannel channel, std::vector<std::uint16_t> samples)
+    : channel(channel), samples(samples) {  }

@@ -158,12 +158,11 @@ void tim_disable()
     TIM1->CR1 &= ~TIM_CR1_CEN;
 }
 
-void tim_configure_for_sampling(osc_horizontal_scale horizontal_scale)
+void tim_configure_for_sampling(uint32_t ext_trig_interval)
 {
-    uint16_t prescaler = 0;
-    uint16_t arv = 0;
+    uint16_t prescaler = 1;
+    uint16_t arv = (ext_trig_interval >> 1) - 1;
 
-    horizontal_scale_to_prescaler_and_arv(horizontal_scale, &prescaler, &arv);
     tim_set_prescaler(prescaler);
     tim_set_arv(arv);
 

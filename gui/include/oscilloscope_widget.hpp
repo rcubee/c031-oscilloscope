@@ -30,6 +30,8 @@ private:
 
     SerialConnection serial_connection;
 
+    void UpdateConfig();
+
     void ConfigureGraph();
 
     void DisplayMessage(const QString& message);
@@ -38,7 +40,7 @@ private:
 public:
     explicit OscilloscopeWidget(QWidget *parent = nullptr);
 
-    void UpdateGraph(const std::vector<uint16_t>& samples);
+    void UpdateGraph(const std::vector<ChannelSamples>& channel_samples_vec);
     void UpdateDevicePathList();
     void SetDevicePath(const QString& device_path);
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "osc_protocol.h"
+#include "oscilloscope.hpp"
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSerialPort>
@@ -20,7 +21,7 @@ private:
 
 signals:
     void SignalFrameMessage(const std::string& message);
-    void SignalFrameSamples(const std::vector<uint16_t>& samples);
+    void SignalFrameSamples(const std::vector<ChannelSamples>& channel_samples);
     void SignalFrameConfig(osc_frame_config frame_config);
 
 public:
@@ -37,5 +38,5 @@ public:
     void FrameStartCollectingSamples();
     void FrameStopCollectingSamples();
     void FrameGetConfig();
-    void FrameConfig(osc_horizontal_scale horizontal_scale);
+    void FrameConfig(osc_echannel channels_enabled, osc_horizontal_scale horizontal_scale);
 };

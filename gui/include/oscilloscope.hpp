@@ -5,6 +5,7 @@
 #include <QSerialPort>
 #include <QValueAxis>
 #include <vertical_dial.hpp>
+#include "osc_protocol.h"
 
 static constexpr float VOLTAGE_MIN = 0.0f;
 static constexpr float VOLTAGE_MAX = 3.3f;
@@ -43,6 +44,7 @@ public:
 
     void AttachAxis(QValueAxis* x_axis, QValueAxis* y_axis);
     QLineSeries* GetSeries();
+
     void Replace(const std::vector<uint16_t>& samples, qreal vertical_position);
 
     void SetVerticalScale(VerticalScale vertical_scale);
@@ -55,4 +57,13 @@ constexpr QColor GetChannelColor(EChannel channel)
         case EChannel::_2: return COLOR_CHANNEL_2;
         default: throw std::runtime_error("Invalid channel");
     }
+};
+
+class ChannelSamples
+{
+public:
+    EChannel channel;
+    std::vector<std::uint16_t> samples;
+
+    ChannelSamples(EChannel channel, std::vector<std::uint16_t> samples);
 };

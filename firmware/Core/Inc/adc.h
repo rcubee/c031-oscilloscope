@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "stm32c0xx.h"
+#include "osc_protocol.h"
 
 #define ADC_BUFF_SIZE_EXP (10U)
 #define ADC_BUFF_SIZE (1U << ADC_BUFF_SIZE_EXP)
@@ -21,12 +22,19 @@ typedef enum adc_sampling_time {
     ADC_SAMPLING_TIME_3_5 = 1U
 } adc_sampling_time;
 
+typedef struct {
+    uint32_t ext_trig_interval; // In ADC clock cycles
+    uint16_t scan_count;
+} adc_acq_params;
+
 void adc_init();
 
-void adc_configure_for_sampling(adc_resolution resolution, adc_sampling_time sampling_time);
+void adc_configure_for_sampling(osc_echannel channels, adc_sampling_time sampling_time, adc_resolution resolution);
 
 void adc_cleanup_after_sampling();
 
 uint16_t* adc_get_buff();
+
+adc_acq_params adc_calculate_acq_params(uint32_t acquisition_time_us, uint16_t max_sample_count, uint8_t channel_count);
 
 #endif /* INC_ADC_H_ */

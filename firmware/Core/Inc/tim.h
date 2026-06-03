@@ -10,7 +10,7 @@ void tim_enable();
 
 void tim_disable();
 
-void tim_configure_for_sampling(osc_horizontal_scale horizontal_scale);
+void tim_configure_for_sampling(uint32_t ext_trig_interval);
 
 void tim_cleanup_after_sampling();
 

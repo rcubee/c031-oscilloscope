@@ -28,13 +28,27 @@ static osc_config osc_get_default_config()
 {
     osc_config config = {
         .adc_resolution = ADC_RESOLUTION_10BIT,
-        .channel1 = 0,
-        .horizontal_scale = OSC_HORIZONTAL_SCALE_200us,
-        .sample_count = 1000,
-        .pre_trigger_sample_count = 250
+        .channels_enabled = 0,
+        .horizontal_scale = OSC_HORIZONTAL_SCALE_1ms
     };
 
     return config;
+}
+
+/*
+ * @brief Returns the number of samples collected after trigger->sample_index.
+ */
+static uint16_t osc_get_post_trigger_sample_count(osc* oscilloscope)
+{
+    return ((ADC_BUFF_SIZE - DMA1_Channel3->CNDTR) - oscilloscope->trigger.sample_index + ADC_BUFF_SIZE) & ADC_BUFF_SIZE_MSK;
+}
+
+/*
+ * @brief Returns the number of scans done after trigger->sample_index.
+ */
+static uint16_t osc_get_post_trigger_scan_count(osc* oscilloscope)
+{
+    return osc_get_post_trigger_sample_count(oscilloscope) / osc_channel_count(oscilloscope->config.channels_enabled);
 }
 
 static void osc_cleanup_after_sampling()
@@ -60,34 +74,31 @@ static void osc_transmit_message(const char* message)
     usart_transmit_dma((uint8_t*)frame, sizeof(osc_frame_message) + frame->length);
 }
 
-static void osc_transmit_samples(osc* oscilloscope)
+#define FRAME_BUFF_CAPACITY (sizeof(osc_frame_samples) + ADC_BUFF_SIZE * sizeof(uint16_t))
+
+static void osc_transmit_samples(osc* oscilloscope, uint16_t samples_collected)
 {
     if (oscilloscope->state != OSC_STATE_SAMPLING) {
         // Note: Sampling was disabled.
         return;
     }
 
-    osc_frame_header frame_header = {
-        .sync = OSC_FRAME_SYNC,
-        .type = OSC_FRAME_TYPE_SAMPLES
-    };
+    static uint8_t frame_buff[FRAME_BUFF_CAPACITY];
 
-    if (osc_trigger_get_total_collected_samples(osc_get_trigger()) < 1000) {
-        assert(0);
-    }
+    uint16_t frame_size = sizeof(osc_frame_samples) + samples_collected * sizeof(uint16_t);
+    osc_frame_samples *frame = osc_build_frame_samples(
+        frame_buff,
+        FRAME_BUFF_CAPACITY,
+        oscilloscope->config.channels_enabled,
+        adc_get_buff(),
+        oscilloscope->trigger.sample_index - (oscilloscope->trigger.pre_trigger_scan_count * osc_channel_count(oscilloscope->config.channels_enabled)),
+        samples_collected,
+        ADC_BUFF_SIZE_MSK
+    );
 
-    usart_transmit_dma((uint8_t*)&frame_header, sizeof(osc_frame_header));
+    assert(frame != NULL);
 
-    uint16_t *adc_buff = adc_get_buff();
-
-    usart_transmit_dma((uint8_t*)&(oscilloscope->config.sample_count), sizeof(uint16_t));
-
-    for (uint16_t i = 0; i < oscilloscope->config.sample_count; ++i) {
-        uint16_t sample_index = (oscilloscope->trigger.sample_index + i - oscilloscope->config.pre_trigger_sample_count) & ADC_BUFF_SIZE_MSK;
-        uint16_t sample = adc_buff[sample_index];
-
-        usart_transmit_dma((uint8_t*)&sample, sizeof(uint16_t));
-    }
+    usart_transmit_dma((uint8_t*)frame, frame_size);
 
     oscilloscope->trigger.estate = OSC_TRIGGER_ESTATE_IDLE;
 
@@ -167,6 +178,7 @@ static void osc_trigger_reset(osc_trigger *trigger)
 {
     trigger->estate = OSC_TRIGGER_ESTATE_IDLE;
     trigger->sample_index = 0;
+    trigger->pre_trigger_scan_count = 0;
     trigger->transfer_complete_count = 0;
 
     // TODO: Move
@@ -198,9 +210,12 @@ void osc_init()
                     }
                 }
             },
-
             .estate = OSC_TRIGGER_ESTATE_IDLE,
+
             .sample_index = 0,
+
+            .pre_trigger_percentage = 25,
+
             .transfer_complete_count = 0
         }
     };
@@ -249,8 +264,7 @@ static void osc_handle_protocol(osc* oscilloscope)
         osc_frame_config frame;
         frame.header.sync = OSC_FRAME_SYNC;
         frame.header.type = OSC_FRAME_TYPE_CONFIG;
-        frame.ch1 = oscilloscope->state == OSC_STATE_SAMPLING;
-        frame.ch2 = 0;
+        frame.channels_enabled = oscilloscope->config.channels_enabled;
         frame.horizontal_scale = oscilloscope->config.horizontal_scale;
 
         usart_transmit_dma((uint8_t*)&frame, sizeof(osc_frame_config));
@@ -262,6 +276,7 @@ static void osc_handle_protocol(osc* oscilloscope)
     {
         osc_frame_config* frame = (osc_frame_config*)(buff + index);
 
+        oscilloscope->config.channels_enabled = frame->channels_enabled;
         oscilloscope->config.horizontal_scale = frame->horizontal_scale;
 
         break;
@@ -284,21 +299,28 @@ void osc_run()
     }
 }
 
-void osc_wait_for_pre_trigger_samples(osc* oscilloscope);
-void osc_wait_for_trigger(osc* oscilloscope, uint8_t timeout_ms);
+void osc_wait_for_pre_trigger_scans(osc* oscilloscope, uint16_t total_scan_count);
+void osc_wait_for_trigger(osc* oscilloscope, uint8_t timeout_ms, uint16_t samples_per_channel);
 void osc_wait_for_post_trigger_samples(osc* oscilloscope);
 
 void osc_sample()
 {
     osc* oscilloscope = osc_get();
-    if (oscilloscope->state != OSC_STATE_SAMPLING) {
+
+    if (oscilloscope->state != OSC_STATE_SAMPLING || oscilloscope->config.channels_enabled == 0) {
         return;
     }
 
     osc_trigger_reset(&oscilloscope->trigger);
 
-    tim_configure_for_sampling(oscilloscope->config.horizontal_scale);
-    adc_configure_for_sampling(oscilloscope->config.adc_resolution, ADC_SAMPLING_TIME_3_5);
+    adc_acq_params acq_params = adc_calculate_acq_params(
+        10 * oscilloscope->config.horizontal_scale,
+        1000,
+        osc_channel_count(oscilloscope->config.channels_enabled)
+    );
+
+    tim_configure_for_sampling(acq_params.ext_trig_interval); // Note: ADC & Timer use the same clock.
+    adc_configure_for_sampling(oscilloscope->config.channels_enabled, ADC_SAMPLING_TIME_3_5, oscilloscope->config.adc_resolution);
     dma_configure_for_sampling();
 
     /* Note: When sampling starts, software must process collected samples
@@ -306,31 +328,32 @@ void osc_sample()
      */
     tim_enable();
 
-    osc_wait_for_pre_trigger_samples(oscilloscope);
-    osc_wait_for_trigger(oscilloscope, 100);
+    osc_wait_for_pre_trigger_scans(oscilloscope, acq_params.scan_count);
+    osc_wait_for_trigger(oscilloscope, 100, acq_params.scan_count);
     osc_wait_for_post_trigger_samples(oscilloscope);
-    osc_transmit_samples(oscilloscope);
+    osc_transmit_samples(oscilloscope, osc_channel_count(oscilloscope->config.channels_enabled) * acq_params.scan_count);
 }
 
-void osc_wait_for_pre_trigger_samples(osc* oscilloscope)
+void osc_wait_for_pre_trigger_scans(osc* oscilloscope, uint16_t total_scan_count)
 {
     osc_trigger* trigger = &oscilloscope->trigger;
 
     trigger->estate = OSC_TRIGGER_ESTATE_COLLECT_PRE_TRIGGER_SAMPLES;
 
-    while (osc_trigger_get_total_collected_samples(trigger) < oscilloscope->config.pre_trigger_sample_count) {
-        uint16_t sample_count = ((ADC_BUFF_SIZE - DMA1_Channel3->CNDTR) - trigger->sample_index + ADC_BUFF_SIZE) & ADC_BUFF_SIZE_MSK;
+    uint16_t scans_done = 0;
+    trigger->pre_trigger_scan_count = (total_scan_count * trigger->pre_trigger_percentage) / 100;
 
-        trigger->sample_index += sample_count;
+    while (scans_done < trigger->pre_trigger_scan_count) {
+        uint16_t post_trigger_scans = osc_get_post_trigger_scan_count(oscilloscope);
+        uint8_t enabled_channel_count = osc_channel_count(oscilloscope->config.channels_enabled);
+
+        trigger->sample_index += post_trigger_scans * enabled_channel_count;
+
+        scans_done += post_trigger_scans;
     }
-
-    trigger->sample_index = oscilloscope->config.pre_trigger_sample_count;
-
-    // LOG("Captured %u pre-trigger samples",
-    //     oscilloscope->config.pre_trigger_sample_count);
 }
 
-void osc_wait_for_trigger(osc* oscilloscope, uint8_t timeout_ms)
+void osc_wait_for_trigger(osc* oscilloscope, uint8_t timeout_ms, uint16_t samples_per_channel)
 {
     osc_trigger* trigger = &oscilloscope->trigger;
     const uint16_t* adc_buff = adc_get_buff();
@@ -350,11 +373,13 @@ void osc_wait_for_trigger(osc* oscilloscope, uint8_t timeout_ms)
             break;
         }
 
-        uint16_t sample_count = ((ADC_BUFF_SIZE - DMA1_Channel3->CNDTR) - trigger->sample_index + ADC_BUFF_SIZE) & ADC_BUFF_SIZE_MSK;
+        uint16_t sample_count = osc_get_post_trigger_sample_count(oscilloscope);
 
+        // TODO: Capture trigger on specific channel
         osc_trigger_algo_result result = trigger->type.algo.fn(
             &trigger->type.algo.data,
             adc_buff,
+            osc_channel_count(oscilloscope->config.channels_enabled),
             trigger->sample_index,
             sample_count);
 
@@ -372,21 +397,19 @@ void osc_wait_for_trigger(osc* oscilloscope, uint8_t timeout_ms)
         return;
     }
 
-    uint32_t dma1_channel3_cndtr = DMA1_Channel3->CNDTR;
-
     {
         /* Note:
-         * Any DMA transfers that occur during this scope will not
-         * be accounted for (CNDTR register changes). In a result,
+         * Any DMA transfers that occur after calculating scans_done
+         * will not be accounted for (ADC scans are ongoing). As a result,
          * more samples may be collected than necessary. This is not
          * an issue as long as the number of extra samples does not
          * exceed the extra space in the sample buffer.
          */
 
-        uint16_t post_trigger_samples_collected = ((ADC_BUFF_SIZE - dma1_channel3_cndtr) - trigger->sample_index + ADC_BUFF_SIZE) & ADC_BUFF_SIZE_MSK;
-        uint16_t samples_to_collect = (oscilloscope->config.sample_count - oscilloscope->config.pre_trigger_sample_count) - post_trigger_samples_collected;
+        uint16_t scans_done = osc_get_post_trigger_scan_count(oscilloscope);
+        uint16_t scans_to_do = samples_per_channel - scans_done - oscilloscope->trigger.pre_trigger_scan_count;
 
-        TIM1->RCR = samples_to_collect - 1; // -1 due to preloading
+        TIM1->RCR = scans_to_do - 1; // -1 due to preloading
     }
 
     /* Note:
@@ -394,7 +417,7 @@ void osc_wait_for_trigger(osc* oscilloscope, uint8_t timeout_ms)
      * which will guarantee that RCR shadow register is updated.
      * This part assumes that core and timer use the same clock.
      */
-    uint32_t cycles_to_wait = tim_get_cycles_to_uev() << 2; // Note: Divide by 2, since each iteration takes atleast 2 cycles
+    uint32_t cycles_to_wait = tim_get_cycles_to_uev() >> 1; // Note: Divide by 2, since each iteration takes atleast 2 cycles
     for (uint32_t cycle = 0; cycle < cycles_to_wait; ++cycle) {
         __ASM ("NOP");
     }

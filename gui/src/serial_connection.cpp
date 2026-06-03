@@ -89,25 +89,45 @@ void SerialConnection::OnReadyRead()
             return;
         }
 
-        size_t payload_length = reinterpret_cast<osc_frame_samples*>(read_buffer.data())->length;
-        if (read_buffer.size() - sizeof(osc_frame_samples) < payload_length * sizeof(uint16_t)) {
+        osc_frame_samples* frame = reinterpret_cast<osc_frame_samples*>(read_buffer.data());
+
+        uint8_t channel_count = osc_channel_count(frame->channels);
+
+        size_t frame_size = sizeof(osc_frame_samples) + channel_count * frame->samples_per_channel * sizeof(uint16_t);
+        size_t sample_count = channel_count * frame->samples_per_channel;
+        if (read_buffer.size() < frame_size) {
             // Note: Wait for the packet payload
             return;
         }
 
-        std::vector<std::uint16_t> samples;
-        samples.reserve(payload_length);
+        std::vector<ChannelSamples> channel_samples_vec;
 
-        for (size_t i = 0; i < payload_length; ++i) {
-            std::uint8_t* payload = read_buffer.data() + sizeof(osc_frame_samples);
-            std::uint16_t sample = payload[2 * i] | (payload[2 * i + 1] << 8);
-
-            samples.push_back(sample);
+        if (frame->channels & OSC_ECHANNEL_1) {
+            channel_samples_vec.emplace_back(EChannel::_1, (std::vector<std::uint16_t>){ });
         }
 
-        emit SignalFrameSamples(samples);
+        if (frame->channels & OSC_ECHANNEL_2) {
+            channel_samples_vec.emplace_back(EChannel::_2, (std::vector<std::uint16_t>){ });
+        }
 
-        read_buffer.erase(read_buffer.begin(), read_buffer.begin() + sizeof(osc_frame_samples) + payload_length);
+        // Copy for each channel samples
+        for (size_t channel = 0; channel < channel_samples_vec.size(); ++channel) {
+            auto& channel_samples = channel_samples_vec.at(channel);
+
+            channel_samples.samples.resize(frame->samples_per_channel);
+
+            for (size_t i = 0; i < frame->samples_per_channel; ++i) {
+                const std::uint8_t* payload = (uint8_t*)frame + sizeof(osc_frame_samples) + frame->samples_per_channel * sizeof(uint16_t) * channel;
+
+                const std::uint16_t sample = payload[2 * i] | (payload[2 * i + 1] << 8);
+
+                channel_samples.samples.at(i) = sample;
+            }
+        }
+
+        emit SignalFrameSamples(channel_samples_vec);
+
+        read_buffer.erase(read_buffer.begin(), read_buffer.begin() + frame_size);
     }
     else if (type == OSC_FRAME_TYPE_CONFIG) {
         if (read_buffer.size() < sizeof(osc_frame_config)) {
@@ -169,13 +189,12 @@ void SerialConnection::FrameGetConfig()
     WriteFrame(&frame_header, sizeof(frame_header));
 }
 
-void SerialConnection::FrameConfig(osc_horizontal_scale horizontal_scale)
+void SerialConnection::FrameConfig(osc_echannel channels_enabled, osc_horizontal_scale horizontal_scale)
 {
     osc_frame_config frame_config;
     frame_config.header.sync = OSC_FRAME_SYNC;
     frame_config.header.type = OSC_FRAME_TYPE_CONFIG;
-    frame_config.ch1 = OSC_CHANNEL_FLAG_ENABLE;
-    frame_config.ch2 = 0;
+    frame_config.channels_enabled = channels_enabled;
     frame_config.horizontal_scale = horizontal_scale;
 
     WriteFrame(&frame_config, sizeof(frame_config));
