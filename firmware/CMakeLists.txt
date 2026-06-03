@@ -53,6 +53,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/Core/Src/dma.c
     ${CMAKE_CURRENT_LIST_DIR}/Core/Src/gpio.c
     ${CMAKE_CURRENT_LIST_DIR}/Core/Src/osc.c
+    ${CMAKE_CURRENT_LIST_DIR}/Core/Src/protocol.c
     ${CMAKE_CURRENT_LIST_DIR}/Core/Src/pwm.c
     ${CMAKE_CURRENT_LIST_DIR}/Core/Src/systick.c
     ${CMAKE_CURRENT_LIST_DIR}/Core/Src/tim.c
