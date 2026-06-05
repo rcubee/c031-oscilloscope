@@ -87,7 +87,7 @@ static void adc_wait_for_ccrdy()
     while (!(ADC1->ISR & ADC_ISR_CCRDY))
         ;
 
-    ADC1->ISR &= ~ADC_ISR_CCRDY;
+    ADC1->ISR = ADC_ISR_CCRDY;
 }
 
 static void adc_select_channels(osc_echannel channels)
