@@ -38,7 +38,7 @@ void osc_handle_protocol(osc* oscilloscope)
         osc_frame_config frame;
         frame.header.sync = OSC_FRAME_SYNC;
         frame.header.type = OSC_FRAME_TYPE_CONFIG;
-        frame.channels_enabled = oscilloscope->config.channels_enabled;
+        frame.channels_enabled = oscilloscope->config.enabled_channels;
         frame.horizontal_scale = oscilloscope->config.horizontal_scale;
 
         usart_transmit_dma((uint8_t*)&frame, sizeof(osc_frame_config));
@@ -50,7 +50,7 @@ void osc_handle_protocol(osc* oscilloscope)
     {
         osc_frame_config* frame = (osc_frame_config*)(buff + index);
 
-        oscilloscope->config.channels_enabled = frame->channels_enabled;
+        oscilloscope->config.enabled_channels = frame->channels_enabled;
         oscilloscope->config.horizontal_scale = frame->horizontal_scale;
 
         break;
@@ -82,9 +82,9 @@ void osc_transmit_samples(osc* oscilloscope, uint16_t samples_collected)
     osc_frame_samples *frame = osc_build_frame_samples(
         frame_buff,
         FRAME_BUFF_CAPACITY,
-        oscilloscope->config.channels_enabled,
+        oscilloscope->config.enabled_channels,
         adc_get_buff(),
-        oscilloscope->trigger.sample_index - (oscilloscope->trigger.pre_trigger_scan_count * osc_channel_count(oscilloscope->config.channels_enabled)),
+        oscilloscope->trigger.sample_index - (oscilloscope->trigger.pre_trigger_scan_count * osc_channel_count(oscilloscope->config.enabled_channels)),
         samples_collected,
         ADC_BUFF_SIZE_MSK
     );

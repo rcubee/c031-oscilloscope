@@ -16,7 +16,8 @@ typedef enum osc_state
 typedef struct osc_config
 {
     adc_resolution adc_resolution;
-    osc_echannel channels_enabled;
+    osc_echannel enabled_channels;
+    osc_echannel trigger_channel;
     osc_horizontal_scale horizontal_scale;
 } osc_config;
 

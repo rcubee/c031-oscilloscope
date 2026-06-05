@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "adc.h"
 
 typedef enum osc_trigger_mode {
     OSC_TRIGGER_MODE_NORM,
@@ -27,15 +26,16 @@ typedef enum osc_trigger_algo_eresult {
  */
 typedef struct osc_trigger_algo_result {
     osc_trigger_algo_eresult eresult;
-    uint16_t sample_index;
+    uint16_t scan_pos;
 } osc_trigger_algo_result;
 
 typedef osc_trigger_algo_result (*osc_trigger_algo_fn)(
     void* data,
-    const uint16_t* sample_buffer,
-    uint8_t channel_count,
-    uint16_t sample_index,
-    uint16_t sample_count
+    const uint16_t* sample_buff,
+    uint8_t enabled_channel_count,
+    uint8_t trigger_channel_seq_pos,
+    uint16_t scan_pos,
+    uint16_t scan_count
 );
 
 typedef struct osc_trigger_algo_threshold {
@@ -86,8 +86,10 @@ typedef struct osc_trigger {
 osc_trigger_algo_result osc_trigger_algo_fn_threshold(
     void* data,
     const uint16_t* sample_buff,
-    uint8_t channel_count,
-    uint16_t sample_index,
-    uint16_t sample_count);
+    uint8_t enabled_channel_count,
+    uint8_t trigger_channel_seq_pos,
+    uint16_t scan_pos,
+    uint16_t scan_count
+);
 
 #endif /* INC_TRIGGER_H_ */
