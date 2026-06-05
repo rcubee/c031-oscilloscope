@@ -46,10 +46,10 @@ static void adc_disable()
 }
 
 // Note: RM0490 Reference manual, 16.4.3 Calibration (ADCAL)
-static void adc_callibrate()
+static void adc_calibrate()
 {
-	uint32_t callibration_factor = 0;
-	volatile uint32_t callibration_factor_sum = 0;
+	uint32_t calibration_factor = 0;
+	volatile uint32_t calibration_factor_sum = 0;
 
 	adc_disable();
 
@@ -61,16 +61,19 @@ static void adc_callibrate()
 		while (ADC1->CR & ADC_CR_ADCAL)
 		    ;
 
-		callibration_factor_sum += (ADC1->CALFACT & ADC_CALFACT_CALFACT) + 1;
+		calibration_factor_sum += (ADC1->CALFACT & ADC_CALFACT_CALFACT) + 1;
 	}
 
-	callibration_factor = (callibration_factor_sum + 7) / 8;
+	calibration_factor = (calibration_factor_sum + 7) / 8;
 
-	if (callibration_factor > 0x7F) {
-		callibration_factor = 0x7F;
+	if (calibration_factor > 0x7F) {
+		calibration_factor = 0x7F;
 	}
 
-	ADC1->CALFACT = callibration_factor;
+	// Note: The calibration factor can be written if the ADC is enabled but not converting (ADEN = 1 and ADSTART = 0).
+	adc_enable();
+	ADC1->CALFACT = calibration_factor;
+	adc_disable();
 }
 
 static void adc_set_resolution(adc_resolution resolution)
@@ -185,7 +188,7 @@ void adc_init()
 
 	adc_voltage_regulator_enable();
 
-	adc_callibrate();
+	adc_calibrate();
 
 	ADC1->CFGR1 =
 	    ADC_CFGR1_DMAEN // Enable DMA
