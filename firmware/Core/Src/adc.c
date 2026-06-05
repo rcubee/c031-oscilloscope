@@ -8,9 +8,10 @@ static void adc_voltage_regulator_enable()
 {
 	ADC1->CR |= ADC_CR_ADVREGEN;
 
-	// Note: Wait for 20us
-	for (uint32_t i = 0; i < 1000; ++i)
-		;
+	// Note: Wait for 20us. TODO: Replace with SysTick / clock-speed dependent delay.
+	for (uint32_t i = 0; i < 1000; ++i) {
+	    __NOP();
+	}
 }
 
 static void adc_enable()
@@ -20,7 +21,7 @@ static void adc_enable()
 	ADC1->CR |= ADC_CR_ADEN;
 
 	while (!(ADC1->ISR & ADC_ISR_ADRDY))
-		;
+	    ;
 }
 
 static void adc_disable()
@@ -29,7 +30,7 @@ static void adc_disable()
 		ADC1->CR |= ADC_CR_ADSTP;
 
 		while (ADC1->CR & ADC_CR_ADSTP)
-			;
+		    ;
 	}
 
 	if (!(ADC1->CR & ADC_CR_ADEN)) {
@@ -39,17 +40,10 @@ static void adc_disable()
 	ADC1->CR |= ADC_CR_ADDIS;
 
 	while (ADC1->CR & ADC_CR_ADEN)
-		;
+	    ;
 
 	ADC1->ISR |= ADC_ISR_ADRDY;
 }
-
-// static void adc_voltage_regulator_disable()
-// {
-// 	adc_disable();
-//
-// 	ADC1->CR &= ~ADC_CR_ADVREGEN;
-// }
 
 // Note: RM0490 Reference manual, 16.4.3 Calibration (ADCAL)
 static void adc_callibrate()
@@ -65,7 +59,7 @@ static void adc_callibrate()
 		ADC1->CR |= ADC_CR_ADCAL;
 
 		while (ADC1->CR & ADC_CR_ADCAL)
-			;
+		    ;
 
 		callibration_factor_sum += (ADC1->CALFACT & ADC_CALFACT_CALFACT) + 1;
 	}
@@ -79,33 +73,43 @@ static void adc_callibrate()
 	ADC1->CALFACT = callibration_factor;
 }
 
-// static void adc_set_conversion_mode()
-// {
-// 	ADC1->CFGR1 &= ~(ADC_CFGR1_CONT | ADC_CFGR1_DISCEN); // Scan mode
-// }
-
 static void adc_set_resolution(adc_resolution resolution)
 {
 	ADC1->CFGR1 = (ADC1->CFGR1 & ~ADC_CFGR1_RES) | resolution;
 }
 
+// Note: RM0490 Reference manual, 16.12.1 ADC interrupt and status register (ADC_ISR)
+static void adc_wait_for_ccrdy()
+{
+    while (!(ADC1->ISR & ADC_ISR_CCRDY))
+        ;
+
+    ADC1->ISR &= ~ADC_ISR_CCRDY;
+}
+
 static void adc_select_channels(osc_echannel channels)
 {
 	while (ADC1->CR & ADC_CR_ADSTART)
-		;
+	    ;
 
-	ADC1->CHSELR &= ~(ADC_CHSELR_CHSEL);
-	ADC1->CHSELR |= channels & OSC_ECHANNEL_1 ? ADC_CHSELR_CHSEL0 : 0;
-	ADC1->CHSELR |= channels & OSC_ECHANNEL_2 ? ADC_CHSELR_CHSEL1 : 0;
+	uint32_t chsel = 0;
+	chsel |= channels & OSC_ECHANNEL_1 ? ADC_CHSELR_CHSEL0 : 0;
+	chsel |= channels & OSC_ECHANNEL_2 ? ADC_CHSELR_CHSEL1 : 0;
+
+	ADC1->CHSELR = (ADC1->CHSELR & (~ADC_CHSELR_CHSEL)) | chsel;
+
+	adc_wait_for_ccrdy();
 
 	// Note: Sequencer not fully configurable, forward scan
 	ADC1->CFGR1 &= ~(ADC_CFGR1_CHSELRMOD | ADC_CFGR1_SCANDIR);
+
+	adc_wait_for_ccrdy();
 }
 
 static void adc_set_sampling_time(adc_sampling_time sampling_time)
 {
 	while (ADC1->CR & ADC_CR_ADSTART)
-		;
+	    ;
 
 	ADC1->SMPR = (ADC1->SMPR & ~ADC_SMPR_SMP1) | sampling_time;
 
