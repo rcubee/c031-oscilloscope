@@ -95,17 +95,31 @@ static void adc_select_channels(osc_echannel channels)
 	while (ADC1->CR & ADC_CR_ADSTART)
 	    ;
 
+	// Note:  Sequencer not fully configurable, forward scan
+	uint32_t new_cfgr1 = ADC1->CFGR1 & (~(ADC_CFGR1_CHSELRMOD | ADC_CFGR1_SCANDIR));
+
+	/*
+	 * Note: RM0490 Reference manual, 16.12.1 ADC interrupt and status register (ADC_ISR)
+	 * CCRDY flag bit is set by hardware when ... or changing CHSELRMOD or SCANDIR...
+	 *
+	 * Don't write to CFGR1 nor wait for CCRDY flag if CHSELRMOD and SCANDIR are not CHANGED.
+	 */
+	if (ADC1->CFGR1 != new_cfgr1) {
+	    ADC1->CFGR1 = new_cfgr1;
+
+		adc_wait_for_ccrdy();
+	}
+
 	uint32_t chsel = 0;
 	chsel |= channels & OSC_ECHANNEL_1 ? ADC_CHSELR_CHSEL0 : 0;
 	chsel |= channels & OSC_ECHANNEL_2 ? ADC_CHSELR_CHSEL1 : 0;
 
-	ADC1->CHSELR = (ADC1->CHSELR & (~ADC_CHSELR_CHSEL)) | chsel;
+	ADC1->CHSELR = chsel;
 
-	adc_wait_for_ccrdy();
-
-	// Note: Sequencer not fully configurable, forward scan
-	ADC1->CFGR1 &= ~(ADC_CFGR1_CHSELRMOD | ADC_CFGR1_SCANDIR);
-
+	/*
+	 * Note: RM0490 Reference manual, 16.12.1 ADC interrupt and status register (ADC_ISR)
+	 * CCRDY flag bit is set by hardware when the channel configuration is applied after PROGRAMMING to ADC_CHSELR register...
+	 */
 	adc_wait_for_ccrdy();
 }
 
